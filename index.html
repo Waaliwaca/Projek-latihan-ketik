@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Latihan Mengetik | Typing Tutor</title>
+    
+    <!-- Memuat Tailwind CSS untuk styling yang mudah -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Memuat Font dari Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .caret {
+            width: 2px;
+            height: 1.5rem;
+            background-color: #3b82f6;
+            display: inline-block;
+            animation: blink 0.9s infinite;
+            position: absolute;
+            transition: left 0.1s ease;
+        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        .correct { color: #22c55e; }
+        .incorrect { color: #ef4444; }
+        .untyped { color: #6b7280; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 flex items-center justify-center min-h-screen py-8">
+
+    <!-- Modal untuk Input Data User -->
+    <div id="user-modal" class="container mx-auto max-w-md p-6 md:p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700">
+        <h1 class="text-3xl font-bold text-center text-white mb-2">Selamat Datang!</h1>
+        <p class="text-center text-gray-400 mb-6">Masukkan data Anda untuk memulai.</p>
+        <div class="space-y-4">
+            <div>
+                <label for="name-input" class="block mb-2 text-sm font-medium text-gray-300">Nama</label>
+                <input type="text" id="name-input" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Nama Anda" required>
+            </div>
+            <div>
+                <label for="region-input" class="block mb-2 text-sm font-medium text-gray-300">Region</label>
+                <input type="text" id="region-input" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Contoh: Jakarta" required>
+            </div>
+            <button id="start-game-button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-all">Mulai Bermain</button>
+        </div>
+    </div>
+
+    <!-- Kontainer Utama Aplikasi (Tersembunyi Awalnya) -->
+    <div id="game-container" class="container mx-auto max-w-4xl p-6 md:p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700" style="display: none;">
+        <div class="flex justify-between items-center">
+             <h1 class="text-3xl md:text-4xl font-bold text-white mb-4">Typing Speed Master</h1>
+             <button id="logout-button" class="bg-red-600 hover:bg-red-700 text-white text-sm font-bold py-2 px-4 rounded-lg transition-all">Ganti User</button>
+        </div>
+        <p class="text-center text-gray-400 mb-8">Naikkan levelmu dan jadilah master mengetik!</p>
+        
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center mb-8 bg-gray-900/50 p-4 rounded-lg">
+            <div><p class="text-sm text-blue-400">Level</p><p id="level" class="text-2xl font-bold">1</p></div>
+            <div><p class="text-sm text-blue-400">Total Poin</p><p id="score" class="text-2xl font-bold">0</p></div>
+            <div><p class="text-sm text-blue-400">WPM</p><p id="wpm" class="text-2xl font-bold">0</p></div>
+            <div><p class="text-sm text-blue-400">Akurasi</p><p id="accuracy" class="text-2xl font-bold">100%</p></div>
+        </div>
+
+        <div id="text-container" class="relative text-2xl tracking-wider bg-gray-900 p-6 rounded-lg mb-6 leading-relaxed font-mono select-none">
+            <div id="text-to-type"></div>
+            <div id="caret" class="caret" style="left: 0px; top: 24px;"></div>
+            <textarea id="user-input" class="absolute top-0 left-0 w-full h-full opacity-0 cursor-text" autofocus></textarea>
+        </div>
+
+        <div class="flex flex-col md:flex-row items-center justify-between min-h-[3rem]">
+            <p id="message" class="text-lg text-yellow-400 h-8"></p>
+            <button id="restart-button" class="mt-4 md:mt-0 w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-all">Mulai Level Berikutnya</button>
+        </div>
+
+        <div class="mt-10">
+            <h2 class="text-2xl font-bold text-center text-white mb-4">Papan Peringkat Global (Top 10)</h2>
+            <div id="leaderboard" class="bg-gray-900/50 p-4 rounded-lg space-y-2"></div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import fungsi yang Anda butuhkan dari SDK
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, doc, getDoc, setDoc, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- KONFIGURASI FIREBASE ---
+        const firebaseConfig = {
+          apiKey: "AIzaSyDew2RnAIjm9qq8kPTHGZMaTQ6fwF-TFGc",
+          authDomain: "typing-master-game.firebaseapp.com",
+          projectId: "typing-master-game",
+          storageBucket: "typing-master-game.appspot.com",
+          messagingSenderId: "133495668778",
+          appId: "1:133495668778:web:4f38ac2239af5c5c0f8353",
+          measurementId: "G-3WQC4721VG"
+        };
+
+        // Inisialisasi Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        
+        // --- Mengambil Elemen dari HTML ---
+        const userModal = document.getElementById('user-modal');
+        const gameContainer = document.getElementById('game-container');
+        const nameInput = document.getElementById('name-input');
+        const regionInput = document.getElementById('region-input');
+        const startGameButton = document.getElementById('start-game-button');
+        const logoutButton = document.getElementById('logout-button');
+        const textToTypeElement = document.getElementById('text-to-type');
+        const userInputElement = document.getElementById('user-input');
+        const wpmElement = document.getElementById('wpm');
+        const accuracyElement = document.getElementById('accuracy');
+        const levelElement = document.getElementById('level');
+        const scoreElement = document.getElementById('score');
+        const messageElement = document.getElementById('message');
+        const restartButton = document.getElementById('restart-button');
+        const caretElement = document.getElementById('caret');
+        const leaderboardElement = document.getElementById('leaderboard');
+
+        // --- Variabel State Aplikasi ---
+        let currentUser = { name: '', region: '' };
+        let currentLevel = 0;
+        let totalScore = 0;
+        let targetText = '';
+        let startTime, timerInterval, typedChars = 0, correctChars = 0, errorCount = 0;
+        let leaderboardUnsubscribe = null; // Untuk menghentikan listener leaderboard
+
+        const textSamples = [
+            "dia dan aku suka sama suka", "kucing itu melompat ke atas meja", "pemrograman adalah seni dan juga sains", "belajar hal baru setiap hari membuat otak tetap tajam", "Jakarta adalah ibukota negara Republik Indonesia yang padat.", "Konstitusi 1945 menjamin hak setiap warga negara.", "Quantum computing (komputasi kuantum) akan merevolusi teknologi.", "Gunakan fungsi `querySelector()` untuk mengambil elemen DOM dengan cepat.", "Angka 1, 2, 3, 4, dan 5 adalah bilangan asli pertama.", "Jaringan 5G menawarkan kecepatan #SuperCepat & latensi rendah (low-latency)!",
+        ];
+        
+        // --- Fungsi Inisialisasi dan Manajemen User ---
+        async function initializeGame() {
+            const name = nameInput.value.trim();
+            const region = regionInput.value.trim();
+            if (name === '' || region === '') { alert('Nama dan Region tidak boleh kosong!'); return; }
+            currentUser = { name, region };
+            localStorage.setItem('typingUser', JSON.stringify(currentUser));
+            
+            userModal.style.display = 'none';
+            gameContainer.style.display = 'block';
+
+            await loadGameDataFromFirebase();
+            listenForLeaderboardUpdates();
+            loadLevel();
+        }
+        
+        function logout() {
+            if (leaderboardUnsubscribe) leaderboardUnsubscribe();
+            localStorage.removeItem('typingUser');
+            window.location.reload();
+        }
+
+        // --- Fungsi untuk Progres & Leaderboard dengan FIRESTORE ---
+        async function loadGameDataFromFirebase() {
+            const userDocId = `${currentUser.name}-${currentUser.region}`;
+            const docRef = doc(db, "players", userDocId);
+            const docSnap = await getDoc(docRef);
+
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                currentLevel = data.level;
+                totalScore = data.totalScore;
+            } else {
+                currentLevel = 0;
+                totalScore = 0;
+            }
+            scoreElement.textContent = totalScore;
+        }
+
+        async function saveGameDataToFirebase() {
+            const userDocId = `${currentUser.name}-${currentUser.region}`;
+            const dataToSave = { 
+                name: currentUser.name,
+                region: currentUser.region,
+                level: currentLevel, 
+                totalScore: totalScore 
+            };
+            await setDoc(doc(db, "players", userDocId), dataToSave, { merge: true });
+        }
+        
+        function calculateLevelScore(wpm, accuracy, errors) {
+            const errorPenalty = errors * 5;
+            const score = Math.round((wpm * 1.5) + accuracy) - errorPenalty;
+            return score < 0 ? 0 : score;
+        }
+
+        function listenForLeaderboardUpdates() {
+            const q = query(collection(db, "players"), orderBy("totalScore", "desc"), limit(10));
+            leaderboardUnsubscribe = onSnapshot(q, (querySnapshot) => {
+                leaderboardElement.innerHTML = '';
+                if(querySnapshot.empty){
+                    leaderboardElement.innerHTML = '<p class="text-gray-500 text-center">Belum ada skor. Jadilah yang pertama!</p>';
+                    return;
+                }
+                querySnapshot.forEach((doc, index) => {
+                    const item = doc.data();
+                    const scoreEntry = document.createElement('div');
+                    scoreEntry.className = 'flex justify-between items-center bg-gray-700/50 p-3 rounded-md';
+                    scoreEntry.innerHTML = `
+                        <div class="flex items-center gap-4">
+                            <span class="font-bold text-blue-400 text-lg w-6">${index + 1}.</span>
+                            <div>
+                                <span class="font-semibold text-white">${item.name}</span>
+                                <span class="text-xs text-gray-400 block">${item.region}</span>
+                            </div>
+                        </div>
+                        <span class="font-bold text-yellow-400">${item.totalScore} Poin</span>
+                    `;
+                    leaderboardElement.appendChild(scoreEntry);
+                });
+            });
+        }
+        
+        // --- Fungsi Utama Permainan (tidak banyak berubah) ---
+        function loadLevel() {
+            if (currentLevel >= textSamples.length) {
+                messageElement.textContent = "Selamat! Anda telah menyelesaikan semua level!";
+                restartButton.textContent = "Main Lagi dari Awal";
+                currentLevel = 0;
+            } else {
+                 restartButton.textContent = "Mulai Level Berikutnya";
+            }
+            targetText = textSamples[currentLevel];
+            levelElement.textContent = currentLevel + 1;
+            textToTypeElement.innerHTML = targetText.split('').map(char => `<span class="untyped">${char}</span>`).join('');
+            resetState();
+        }
+
+        function resetState() {
+            userInputElement.value = '';
+            userInputElement.disabled = false;
+            userInputElement.focus();
+            clearInterval(timerInterval);
+            timerInterval = null; startTime = null;
+            typedChars = 0; correctChars = 0; errorCount = 0;
+            scoreElement.textContent = totalScore; 
+            wpmElement.textContent = '0';
+            accuracyElement.textContent = '100%';
+            messageElement.textContent = '';
+            restartButton.style.display = 'none';
+            updateCaretPosition();
+        }
+        
+        function handleInput() {
+            if (!startTime) {
+                startTime = new Date();
+                timerInterval = setInterval(updateStats, 500);
+            }
+            const userInput = userInputElement.value;
+            const textSpans = textToTypeElement.querySelectorAll('span');
+            typedChars = userInput.length;
+            correctChars = 0;
+            let allCorrect = true;
+            textSpans.forEach((charSpan, index) => {
+                const char = userInput[index];
+                if (char == null) {
+                    charSpan.className = 'untyped'; allCorrect = false;
+                } else if (char === charSpan.innerText) {
+                    charSpan.className = 'correct'; correctChars++;
+                } else {
+                    charSpan.className = 'incorrect'; allCorrect = false;
+                }
+            });
+            errorCount = typedChars - correctChars;
+            updateStats();
+            updateCaretPosition();
+            if (allCorrect && userInput.length === targetText.length) {
+                levelComplete();
+            }
+        }
+
+        function updateStats() {
+            if (!startTime) return;
+            const elapsedTime = (new Date() - startTime) / 1000;
+            const wpm = typedChars > 0 ? Math.round((correctChars / 5) / (elapsedTime / 60)) : 0;
+            const accuracy = typedChars > 0 ? Math.round((correctChars / typedChars) * 100) : 100;
+            wpmElement.textContent = wpm < 0 ? 0 : wpm;
+            accuracyElement.textContent = `${accuracy}%`;
+        }
+        
+        function updateCaretPosition() {
+            const spans = textToTypeElement.querySelectorAll('span');
+            const lastTypedCharIndex = userInputElement.value.length;
+            let caretPos = { left: 0, top: 24 };
+            if (lastTypedCharIndex < spans.length) {
+                const currentSpan = spans[lastTypedCharIndex];
+                caretPos.left = currentSpan.offsetLeft;
+                caretPos.top = currentSpan.offsetTop;
+            } else if (spans.length > 0) {
+                const lastSpan = spans[spans.length - 1];
+                caretPos.left = lastSpan.offsetLeft + lastSpan.offsetWidth;
+                caretPos.top = lastSpan.offsetTop;
+            }
+            caretElement.style.left = `${caretPos.left}px`;
+            caretElement.style.top = `${caretPos.top}px`;
+        }
+
+        async function levelComplete() {
+            clearInterval(timerInterval);
+            userInputElement.disabled = true;
+            const finalWPM = parseInt(wpmElement.textContent);
+            const finalAccuracy = parseInt(accuracyElement.textContent);
+            const levelScore = calculateLevelScore(finalWPM, finalAccuracy, errorCount);
+            
+            totalScore += levelScore;
+            scoreElement.textContent = totalScore;
+            messageElement.textContent = `Level Selesai! Anda dapat ${levelScore} poin.`;
+
+            currentLevel++;
+            await saveGameDataToFirebase();
+            restartButton.style.display = 'block';
+        }
+
+        // --- Event Listeners ---
+        startGameButton.addEventListener('click', initializeGame);
+        logoutButton.addEventListener('click', logout);
+        userInputElement.addEventListener('input', handleInput);
+        restartButton.addEventListener('click', loadLevel);
+        document.getElementById('text-container').addEventListener('click', () => userInputElement.focus());
+
+        // --- Memulai Aplikasi ---
+        window.onload = async () => {
+            const savedUser = localStorage.getItem('typingUser');
+            if (savedUser) {
+                currentUser = JSON.parse(savedUser);
+                userModal.style.display = 'none';
+                gameContainer.style.display = 'block';
+                await loadGameDataFromFirebase();
+                listenForLeaderboardUpdates();
+                loadLevel();
+            }
+        };
+    </script>
+</body>
+</html>
