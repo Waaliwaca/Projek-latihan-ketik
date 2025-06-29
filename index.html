@@ -246,6 +246,12 @@
         }
         
         function handleInput() {
+            // -- PERBAIKAN BUG --
+            // Mencegah pengguna mengetik lebih banyak dari teks target
+            if (userInputElement.value.length > targetText.length) {
+                userInputElement.value = userInputElement.value.substring(0, targetText.length);
+            }
+            
             if (!startTime) {
                 startTime = new Date();
                 timerInterval = setInterval(updateStats, 500);
